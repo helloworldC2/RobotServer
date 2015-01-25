@@ -6,8 +6,8 @@ public class Client {
 
 	public String username;
 	public int port;
-	public int x,y,movingDir,numSteps;
-	public boolean isMoving;
+	public int x,y,movingDir;
+	public boolean isSwimming;
 	public InetAddress ipAddress;
 	public Client(String username, InetAddress ipAddress, int port){
 		this.ipAddress = ipAddress;
@@ -19,8 +19,8 @@ public class Client {
 		return this.username;
 	}
 
-	public void setMoving(boolean moving) {
-		this.isMoving = moving;
+	public void setSwimming(boolean swimming) {
+		this.isSwimming = swimming;
 		
 	}
 
@@ -29,8 +29,5 @@ public class Client {
 		
 	}
 
-	public void setNumSteps(int n) {
-		this.numSteps = n;
-		
-	}
+	
 }

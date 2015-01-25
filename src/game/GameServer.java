@@ -13,16 +13,20 @@ import packets.Packet.PacketTypes;
 import packets.Packet00Login;
 import packets.Packet01Disconnect;
 import packets.Packet02Move;
+import packets.Packet03AddEntity;
+import packets.Packet04MoveEntity;
+import packets.Packet05SendTiles;
+import packets.Packet06UpdateTile;
 
 
 
 public class GameServer extends Thread {
 
     private DatagramSocket socket;
-    private Game game;
     private List<Client> connectedPlayers = new ArrayList<Client>();
-    public GameServer(Game game) {
-        this.game = game;
+    private List<Entity> entities = new ArrayList<Entity>();
+    private int[] tiles;
+    public GameServer() {
         try {
             this.socket = new DatagramSocket(1331);
         } catch (SocketException e) {
@@ -34,7 +38,7 @@ public class GameServer extends Thread {
 
     public void run() {
         while (true) {
-            byte[] data = new byte[1024];
+            byte[] data = new byte[4096];
             DatagramPacket packet = new DatagramPacket(data, data.length);
             try {
                 socket.receive(packet);
@@ -61,6 +65,14 @@ public class GameServer extends Thread {
             this.addConnection(player, (Packet00Login) packet);
             Packet00Login accepted = new Packet00Login(data);
             accepted.writeDataToOneClient(this, player);
+            if(tiles!=null){
+            	Packet05SendTiles t = new Packet05SendTiles(tiles);
+            	t.writeDataToOneClient(this, player);
+            }
+            for(Entity e : entities){
+            	Packet03AddEntity ent = new Packet03AddEntity(e.id, e.type, e.x, e.y);
+            	ent.writeDataToOneClient(this, player);
+            }
             break;
         case DISCONNECT:
             packet = new Packet01Disconnect(data);
@@ -72,6 +84,33 @@ public class GameServer extends Thread {
             packet = new Packet02Move(data);
             this.handleMove(((Packet02Move) packet),address,port);
             break;
+        case ADDENTITY:
+        	Packet03AddEntity adde = new Packet03AddEntity(data);
+        	entities.add(new Entity(adde.getId(),adde.getType(),adde.getX(),adde.getY(),false));
+        	break;
+        case MOVEENTITY:
+        	Packet04MoveEntity move = new Packet04MoveEntity(data);
+        	Entity e = entities.get(move.getId());
+        	e.x = move.getX();
+        	e.y = move.getY();
+        	e.isSwimming = move.getSwimming();
+        	for(int i=1;i<connectedPlayers.size();i++){
+        		move.writeDataToOneClient(this, connectedPlayers.get(i));
+        	}
+        	break;
+        case SENDTILES:
+        	Packet05SendTiles t = new Packet05SendTiles(data);
+        	tiles = t.getTiles();
+        	for(int i=1;i<connectedPlayers.size();i++){
+        		t.writeDataToOneClient(this, connectedPlayers.get(i));
+        	}
+        	break;
+        case UPDATETILES:
+        	Packet06UpdateTile tile = new Packet06UpdateTile(data);
+        	tiles[tile.getX()+(tile.getY()*32)] = tile.getTile();//assumes it has a width of 32, bad!
+        	for(int i=0;i<connectedPlayers.size();i++){
+        		tile.writeDataToOneClient(this, connectedPlayers.get(i));
+        	}
         }
     }
 
@@ -87,12 +126,7 @@ public class GameServer extends Thread {
                 }
                 alreadyConnected = true;
             } else {
-                // relay to the current connected player that there is a new
-                // player
                 sendData(packet.getData(), p.ipAddress, p.port);
-
-                // relay to the new player that the currently connect player
-                // exists
                 packet = new Packet00Login(p.getUsername(), p.x, p.y);
                 sendData(packet.getData(), player.ipAddress, player.port);
             }
@@ -128,7 +162,7 @@ public class GameServer extends Thread {
     }
 
     public void sendData(byte[] data, InetAddress ipAddress, int port) {
-    		System.out.println(getTimeStamp()+"Sending "+new String(data)+" ("+data.length+" bytes)"+"  [" + ipAddress.getHostAddress() + ":" + port + "] ");
+    		//System.out.println(getTimeStamp()+"Sending "+new String(data)+" ("+data.length+" bytes)"+"  [" + ipAddress.getHostAddress() + ":" + port + "] ");
             DatagramPacket packet = new DatagramPacket(data, data.length, ipAddress, port);
             try {
                 this.socket.send(packet);
@@ -156,9 +190,8 @@ public class GameServer extends Thread {
             Client player = this.connectedPlayers.get(index);
             player.x = packet.getX();
             player.y = packet.getY();
-            player.setMoving(packet.isMoving());
             player.setMovingDir(packet.getMovingDir());
-            player.setNumSteps(packet.getNumSteps());
+            player.setSwimming(packet.isSwimming());
             packet.writeData(this);
             
         }
